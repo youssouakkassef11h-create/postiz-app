@@ -4,9 +4,21 @@ import { shuffle } from 'lodash';
 import { zodResponseFormat } from 'openai/helpers/zod';
 import { z } from 'zod';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || 'sk-proj-',
+// --- Client for Images (Default: OpenAI DALL-E 3) ---
+const imageOpenai = new OpenAI({
+  apiKey: process.env.AI_IMAGE_KEY || process.env.OPENAI_API_KEY || 'sk-proj-',
+  baseURL: process.env.AI_IMAGE_BASE_URL || 'https://api.openai.com/v1',
 });
+
+// --- Client for Text/Chat (Default: OpenAI, but configurable for Gemini/Groq/etc) ---
+const textOpenai = new OpenAI({
+  apiKey: process.env.AI_TEXT_KEY || process.env.OPENAI_API_KEY || 'sk-proj-',
+  baseURL: process.env.AI_TEXT_BASE_URL || 'https://api.openai.com/v1',
+});
+
+// Default Text Model (can be overridden)
+const TEXT_MODEL = process.env.AI_TEXT_MODEL || 'gpt-4o'; 
+const IMAGE_MODEL = process.env.AI_IMAGE_MODEL || 'dall-e-3';
 
 const PicturePrompt = z.object({
   prompt: z.string(),
@@ -20,10 +32,10 @@ const VoicePrompt = z.object({
 export class OpenaiService {
   async generateImage(prompt: string, isUrl: boolean, isVertical = false) {
     const generate = (
-      await openai.images.generate({
+      await imageOpenai.images.generate({
         prompt,
         response_format: isUrl ? 'url' : 'b64_json',
-        model: 'dall-e-3',
+        model: IMAGE_MODEL,
         ...(isVertical ? { size: '1024x1792' } : {}),
       })
     ).data[0];
@@ -34,8 +46,8 @@ export class OpenaiService {
   async generatePromptForPicture(prompt: string) {
     return (
       (
-        await openai.chat.completions.parse({
-          model: 'gpt-4.1',
+        await textOpenai.chat.completions.parse({
+          model: TEXT_MODEL,
           messages: [
             {
               role: 'system',
@@ -55,8 +67,8 @@ export class OpenaiService {
   async generateVoiceFromText(prompt: string) {
     return (
       (
-        await openai.chat.completions.parse({
-          model: 'gpt-4.1',
+        await textOpenai.chat.completions.parse({
+          model: TEXT_MODEL,
           messages: [
             {
               role: 'system',
@@ -76,7 +88,7 @@ export class OpenaiService {
   async generatePosts(content: string) {
     const posts = (
       await Promise.all([
-        openai.chat.completions.create({
+        textOpenai.chat.completions.create({
           messages: [
             {
               role: 'assistant',
@@ -90,9 +102,9 @@ export class OpenaiService {
           ],
           n: 5,
           temperature: 1,
-          model: 'gpt-4.1',
+          model: TEXT_MODEL,
         }),
-        openai.chat.completions.create({
+        textOpenai.chat.completions.create({
           messages: [
             {
               role: 'assistant',
@@ -106,7 +118,7 @@ export class OpenaiService {
           ],
           n: 5,
           temperature: 1,
-          model: 'gpt-4.1',
+          model: TEXT_MODEL,
         }),
       ])
     ).flatMap((p) => p.choices);
@@ -132,7 +144,7 @@ export class OpenaiService {
     );
   }
   async extractWebsiteText(content: string) {
-    const websiteContent = await openai.chat.completions.create({
+    const websiteContent = await textOpenai.chat.completions.create({
       messages: [
         {
           role: 'assistant',
@@ -144,7 +156,7 @@ export class OpenaiService {
           content,
         },
       ],
-      model: 'gpt-4.1',
+      model: TEXT_MODEL,
     });
 
     const { content: articleContent } = websiteContent.choices[0].message;
@@ -163,8 +175,8 @@ export class OpenaiService {
 
     const posts =
       (
-        await openai.chat.completions.parse({
-          model: 'gpt-4.1',
+        await textOpenai.chat.completions.parse({
+          model: TEXT_MODEL,
           messages: [
             {
               role: 'system',
@@ -196,8 +208,8 @@ export class OpenaiService {
             try {
               return (
                 (
-                  await openai.chat.completions.parse({
-                    model: 'gpt-4.1',
+                  await textOpenai.chat.completions.parse({
+                    model: TEXT_MODEL,
                     messages: [
                       {
                         role: 'system',
@@ -232,8 +244,8 @@ export class OpenaiService {
         const message = `You are an assistant that takes a text and break it into slides, each slide should have an image prompt and voice text to be later used to generate a video and voice, image prompt should capture the essence of the slide and also have a back dark gradient on top, image prompt should not contain text in the picture, generate between 3-5 slides maximum`;
         const parse =
           (
-            await openai.chat.completions.parse({
-              model: 'gpt-4.1',
+            await textOpenai.chat.completions.parse({
+              model: TEXT_MODEL,
               messages: [
                 {
                   role: 'system',
